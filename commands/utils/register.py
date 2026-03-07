@@ -377,7 +377,7 @@ class PainelRegistroView(View):
         self.cog = cog
         self.guild_id = guild_id
         
-        # Adiciona os três selects em linhas diferentes para ficar organizado
+        # Adiciona os três selects em linhas diferentes
         idade_select = UserIdadeSelect(cog, guild_id)
         idade_select.row = 0
         self.add_item(idade_select)
@@ -628,7 +628,7 @@ class Register(commands.Cog):
         await interaction.response.send_message(msg, ephemeral=True)
 
     def create_preview_embed(self, guild_id):
-        """Cria embed de preview com as opções configuradas em formato de tabela alinhada"""
+        """Cria embed de preview com as opções configuradas em formato de lista por categoria"""
         config = self.config.get(guild_id, {
             "embed_title": "Painel de Registro",
             "embed_description": "Escolha suas opções abaixo para se registrar:",
@@ -647,54 +647,35 @@ class Register(commands.Cog):
         # Pega as opções configuradas
         guild_roles = self.registro_roles.get(guild_id, {"idade": {}, "genero": {}, "pronome": {}})
         
-        # Cria as listas de opções
-        idades = []
-        generos = []
-        pronomes = []
+        # Monta o campo de opções disponíveis
+        opcoes_texto = "## Opções Disponíveis\n\n"
         
-        for nome, data in guild_roles["idade"].items():
-            idades.append(f"{nome} → @{data['role_name']}")
+        # Categoria Idade
+        if guild_roles["idade"]:
+            opcoes_texto += "### Idade\n"
+            for nome, data in guild_roles["idade"].items():
+                opcoes_texto += f"- {nome} → @{data['role_name']}\n"
+            opcoes_texto += "\n"
         
-        for nome, data in guild_roles["genero"].items():
-            generos.append(f"{nome} → @{data['role_name']}")
+        # Categoria Gênero
+        if guild_roles["genero"]:
+            opcoes_texto += "### Gênero\n"
+            for nome, data in guild_roles["genero"].items():
+                opcoes_texto += f"- {nome} → @{data['role_name']}\n"
+            opcoes_texto += "\n"
         
-        for nome, data in guild_roles["pronome"].items():
-            pronomes.append(f"{nome} → @{data['role_name']}")
+        # Categoria Pronomes
+        if guild_roles["pronome"]:
+            opcoes_texto += "### Pronomes\n"
+            for nome, data in guild_roles["pronome"].items():
+                opcoes_texto += f"- {nome} → @{data['role_name']}\n"
+            opcoes_texto += "\n"
         
-        # Monta a tabela alinhada igual à imagem
-        tabela = ""
+        # Adiciona o campo de opções ao embed
+        embed.add_field(name="", value=opcoes_texto, inline=False)
         
-        # Cabeçalho
-        tabela += "Idade" + " " * 17 + "Gênero" + " " * 16 + "Pronomes\n"
-        tabela += "─" * 22 + "┼" + "─" * 22 + "┼" + "─" * 22 + "\n"
-        
-        # Determina quantas linhas teremos
-        max_linhas = max(len(idades), len(generos), len(pronomes))
-        
-        for i in range(max_linhas):
-            linha = ""
-            
-            # Coluna Idade
-            if i < len(idades):
-                linha += idades[i].ljust(22) + "│"
-            else:
-                linha += " " * 22 + "│"
-            
-            # Coluna Gênero
-            if i < len(generos):
-                linha += generos[i].ljust(22) + "│"
-            else:
-                linha += " " * 22 + "│"
-            
-            # Coluna Pronomes
-            if i < len(pronomes):
-                linha += pronomes[i]
-            
-            tabela += linha + "\n"
-        
-        # Adiciona a tabela ao embed
-        embed.add_field(name="📋 Opções Disponíveis", value=f"```{tabela}```", inline=False)
-        embed.add_field(name="ℹ️ Como usar", value="Clique em uma opção abaixo para selecionar", inline=False)
+        # Adiciona instrução de como usar
+        embed.add_field(name="", value="---\n## Como usar\n\nClique em uma opção abaixo para selecionar", inline=False)
         
         if config["embed_footer"]:
             embed.set_footer(text=config["embed_footer"])
