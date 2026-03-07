@@ -648,34 +648,34 @@ class Register(commands.Cog):
         guild_roles = self.registro_roles.get(guild_id, {"idade": {}, "genero": {}, "pronome": {}})
         
         # Monta o campo de opções disponíveis
-        opcoes_texto = "## Opções Disponíveis\n\n"
+        opcoes_texto = "**Registro**\n\n"
         
         # Categoria Idade
         if guild_roles["idade"]:
-            opcoes_texto += "### Idade\n"
+            opcoes_texto += "**Idade**\n"
             for nome, data in guild_roles["idade"].items():
                 opcoes_texto += f"- {nome} → @{data['role_name']}\n"
             opcoes_texto += "\n"
         
         # Categoria Gênero
         if guild_roles["genero"]:
-            opcoes_texto += "### Gênero\n"
+            opcoes_texto += "**Gênero**\n"
             for nome, data in guild_roles["genero"].items():
                 opcoes_texto += f"- {nome} → @{data['role_name']}\n"
             opcoes_texto += "\n"
         
         # Categoria Pronomes
         if guild_roles["pronome"]:
-            opcoes_texto += "### Pronomes\n"
+            opcoes_texto += "**Pronomes**\n"
             for nome, data in guild_roles["pronome"].items():
                 opcoes_texto += f"- {nome} → @{data['role_name']}\n"
             opcoes_texto += "\n"
         
         # Adiciona o campo de opções ao embed
-        embed.add_field(name="", value=opcoes_texto, inline=False)
+        embed.add_field(name="", value=opcoes_texto, inline=True)
         
         # Adiciona instrução de como usar
-        embed.add_field(name="", value="---\n## Como usar\n\nClique em uma opção abaixo para selecionar", inline=False)
+        embed.add_field(name="", value="---\nComo usar\n\nClique em uma opção abaixo para selecionar", inline=True)
         
         if config["embed_footer"]:
             embed.set_footer(text=config["embed_footer"])
