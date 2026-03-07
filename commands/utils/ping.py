@@ -101,7 +101,9 @@ class PingConfigView(View):
 
     @discord.ui.button(label="Remover Cargo", style=discord.ButtonStyle.danger, emoji="➖", row=0, custom_id="ping:remove_btn")
     async def remove_button(self, interaction: discord.Interaction, button: Button):
-        roles_dict = self.cog.roles_pings.get(str(interaction.guild_id), {})
+        guild_id = str(interaction.guild_id)
+        roles_dict = self.cog.roles_pings.get(guild_id, {})
+        
         if not roles_dict:
             await interaction.response.send_message("Não há cargos configurados para remover.", ephemeral=True)
             return
@@ -141,6 +143,14 @@ class UserPingSelect(Select):
                 value=nome_exibicao
             ))
         
+        # Se não houver opções, adiciona uma opção padrão
+        if not options:
+            options.append(discord.SelectOption(
+                label="Nenhum ping disponível",
+                value="none",
+                default=True
+            ))
+        
         super().__init__(
             placeholder="Escolha um ping...",
             options=options,
@@ -150,6 +160,10 @@ class UserPingSelect(Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
+        if self.values[0] == "none":
+            await interaction.response.send_message("Não há pings configurados neste servidor.", ephemeral=True)
+            return
+        
         nome_exibicao = self.values[0]
         
         # Pega os cargos do servidor
@@ -188,42 +202,61 @@ class PainelPingView(View):
 
 # View para editar configurações do embed (para /editar_ping)
 class EditConfigView(View):
-    def __init__(self, cog, interaction):
+    def __init__(self, cog, interaction, guild_id):
         super().__init__(timeout=60)
         self.cog = cog
         self.interaction = interaction
+        self.guild_id = guild_id
 
     @discord.ui.button(label="Título", style=discord.ButtonStyle.primary, custom_id="edit_title_btn")
     async def edit_title(self, interaction: discord.Interaction, button: Button):
-        modal = self.cog.EditConfigModal(self.cog, "title", "Editar Título", "Novo título:", interaction, self.cog.embed_title)
+        modal = self.cog.EditConfigModal(
+            self.cog, "title", "Editar Título", "Novo título:", 
+            interaction, self.cog.embed_configs[self.guild_id]["embed_title"], self.guild_id
+        )
         await interaction.response.send_modal(modal)
 
     @discord.ui.button(label="Descrição", style=discord.ButtonStyle.primary, custom_id="edit_desc_btn")
     async def edit_description(self, interaction: discord.Interaction, button: Button):
-        modal = self.cog.EditConfigModal(self.cog, "description", "Editar Descrição", "Nova descrição:", interaction, self.cog.embed_description)
+        modal = self.cog.EditConfigModal(
+            self.cog, "description", "Editar Descrição", "Nova descrição:", 
+            interaction, self.cog.embed_configs[self.guild_id]["embed_description"], self.guild_id
+        )
         await interaction.response.send_modal(modal)
 
     @discord.ui.button(label="Cor", style=discord.ButtonStyle.primary, custom_id="edit_color_btn")
     async def edit_color(self, interaction: discord.Interaction, button: Button):
-        current = f"{self.cog.embed_color:06X}"
-        modal = self.cog.EditConfigModal(self.cog, "color", "Editar Cor", "Nova cor (hex):", interaction, current)
+        current = f"{self.cog.embed_configs[self.guild_id]['embed_color']:06X}"
+        modal = self.cog.EditConfigModal(
+            self.cog, "color", "Editar Cor", "Nova cor (hex):", 
+            interaction, current, self.guild_id
+        )
         await interaction.response.send_modal(modal)
 
     @discord.ui.button(label="Footer", style=discord.ButtonStyle.primary, custom_id="edit_footer_btn")
     async def edit_footer(self, interaction: discord.Interaction, button: Button):
-        modal = self.cog.EditConfigModal(self.cog, "footer", "Editar Footer", "Novo footer:", interaction, self.cog.embed_footer)
+        modal = self.cog.EditConfigModal(
+            self.cog, "footer", "Editar Footer", "Novo footer:", 
+            interaction, self.cog.embed_configs[self.guild_id]["embed_footer"], self.guild_id
+        )
         await interaction.response.send_modal(modal)
 
     @discord.ui.button(label="Thumbnail", style=discord.ButtonStyle.primary, custom_id="edit_thumb_btn")
     async def edit_thumbnail(self, interaction: discord.Interaction, button: Button):
-        current = self.cog.embed_thumbnail or ""
-        modal = self.cog.EditConfigModal(self.cog, "thumbnail", "Editar Thumbnail", "URL da thumbnail:", interaction, current)
+        current = self.cog.embed_configs[self.guild_id]["embed_thumbnail"] or ""
+        modal = self.cog.EditConfigModal(
+            self.cog, "thumbnail", "Editar Thumbnail", "URL da thumbnail:", 
+            interaction, current, self.guild_id
+        )
         await interaction.response.send_modal(modal)
 
     @discord.ui.button(label="Imagem", style=discord.ButtonStyle.primary, custom_id="edit_img_btn")
     async def edit_image(self, interaction: discord.Interaction, button: Button):
-        current = self.cog.embed_image or ""
-        modal = self.cog.EditConfigModal(self.cog, "image", "Editar Imagem", "URL da imagem:", interaction, current)
+        current = self.cog.embed_configs[self.guild_id]["embed_image"] or ""
+        modal = self.cog.EditConfigModal(
+            self.cog, "image", "Editar Imagem", "URL da imagem:", 
+            interaction, current, self.guild_id
+        )
         await interaction.response.send_modal(modal)
 
 
@@ -238,10 +271,15 @@ class Ping(commands.Cog):
         self.config_collection = None
         self.roles_collection = None
         self.roles_pings = {}  # Dicionário: guild_id -> {nome_exibicao: {'role_id': id, 'role_name': nome}}
+        self.embed_configs = {}  # Configurações por servidor: guild_id -> {title, description, color, footer, thumbnail, image}
         
         self.connect_mongo()
-        self.load_config()
-        self.load_roles()
+        self.load_all_configs()
+        self.load_all_roles()
+        
+        # Registra views persistentes para cada servidor
+        for guild_id in self.roles_pings:
+            self.bot.add_view(PainelPingView(self, int(guild_id)))
 
     def connect_mongo(self):
         try:
@@ -256,46 +294,53 @@ class Ping(commands.Cog):
             self.config_collection = None
             self.roles_collection = None
 
-    def load_config(self):
-        """Carrega configurações do embed do MongoDB"""
+    def load_all_configs(self):
+        """Carrega configurações do embed de todos os servidores do MongoDB"""
+        self.embed_configs = {}
         if self.config_collection is not None:
-            doc = self.config_collection.find_one({"_id": "config"})
-            if doc:
-                self.embed_title = doc.get("embed_title", "Painel de Pings")
-                self.embed_description = doc.get("embed_description", "Selecione os pings que deseja receber:")
-                self.embed_color = doc.get("embed_color", 0x2C2F33)
-                self.embed_footer = doc.get("embed_footer", "Clique nos botões abaixo para ativar/desativar")
-                self.embed_thumbnail = doc.get("embed_thumbnail", None)
-                self.embed_image = doc.get("embed_image", None)
-            else:
-                self.set_default_config()
-        else:
-            self.set_default_config()
+            cursor = self.config_collection.find({})
+            for doc in cursor:
+                guild_id = doc.get("guild_id")
+                if guild_id:
+                    self.embed_configs[guild_id] = {
+                        "embed_title": doc.get("embed_title", "Painel de Pings"),
+                        "embed_description": doc.get("embed_description", "Selecione os pings que deseja receber:"),
+                        "embed_color": doc.get("embed_color", 0x2C2F33),
+                        "embed_footer": doc.get("embed_footer", "Clique nos botões abaixo para ativar/desativar"),
+                        "embed_thumbnail": doc.get("embed_thumbnail", None),
+                        "embed_image": doc.get("embed_image", None)
+                    }
+            print(f"📦 Carregadas {len(self.embed_configs)} configurações de servidores")
 
-    def set_default_config(self):
-        """Configurações padrão"""
-        self.embed_title = "Painel de Pings"
-        self.embed_description = "Selecione os pings que deseja receber:"
-        self.embed_color = 0x2C2F33
-        self.embed_footer = "Clique nos botões abaixo para ativar/desativar"
-        self.embed_thumbnail = None
-        self.embed_image = None
-
-    def save_config(self):
-        """Salva configurações do embed no MongoDB"""
-        if self.config_collection is not None:
-            data = {
-                "_id": "config",
-                "embed_title": self.embed_title,
-                "embed_description": self.embed_description,
-                "embed_color": self.embed_color,
-                "embed_footer": self.embed_footer,
-                "embed_thumbnail": self.embed_thumbnail,
-                "embed_image": self.embed_image
+    def get_guild_config(self, guild_id):
+        """Retorna a configuração de um servidor específico ou cria uma padrão"""
+        if guild_id not in self.embed_configs:
+            self.embed_configs[guild_id] = {
+                "embed_title": "Painel de Pings",
+                "embed_description": "Selecione os pings que deseja receber:",
+                "embed_color": 0x2C2F33,
+                "embed_footer": "Clique nos botões abaixo para ativar/desativar",
+                "embed_thumbnail": None,
+                "embed_image": None
             }
-            self.config_collection.replace_one({"_id": "config"}, data, upsert=True)
+        return self.embed_configs[guild_id]
 
-    def load_roles(self):
+    def save_guild_config(self, guild_id):
+        """Salva configurações de um servidor no MongoDB"""
+        if self.config_collection is not None and guild_id in self.embed_configs:
+            config = self.embed_configs[guild_id]
+            data = {
+                "guild_id": guild_id,
+                "embed_title": config["embed_title"],
+                "embed_description": config["embed_description"],
+                "embed_color": config["embed_color"],
+                "embed_footer": config["embed_footer"],
+                "embed_thumbnail": config["embed_thumbnail"],
+                "embed_image": config["embed_image"]
+            }
+            self.config_collection.replace_one({"guild_id": guild_id}, data, upsert=True)
+
+    def load_all_roles(self):
         """Carrega os cargos de ping do MongoDB por servidor"""
         self.roles_pings = {}
         if self.roles_collection is not None:
@@ -386,20 +431,18 @@ class Ping(commands.Cog):
         except:
             await interaction.response.send_message(f"✅ Ping '{nome_exibicao}' removido! (Cargo: {role_name})", ephemeral=True)
 
-    def create_preview_embed(self, guild_id=None):
-        """Cria embed de preview com a lista de cargos (sem IDs)"""
+    def create_preview_embed(self, guild_id):
+        """Cria embed de preview com a lista de cargos (sem IDs) para um servidor específico"""
+        config = self.get_guild_config(guild_id)
+        
         embed = discord.Embed(
-            title=self.embed_title,
-            description=self.embed_description,
-            color=self.embed_color
+            title=config["embed_title"],
+            description=config["embed_description"],
+            color=config["embed_color"]
         )
         
-        # Se não tiver guild_id, tenta pegar o primeiro disponível
-        if not guild_id and self.roles_pings:
-            guild_id = next(iter(self.roles_pings.keys()))
-        
         # Adiciona a lista de cargos disponíveis para este servidor
-        if guild_id and guild_id in self.roles_pings and self.roles_pings[guild_id]:
+        if guild_id in self.roles_pings and self.roles_pings[guild_id]:
             cargos_lista = []
             for nome_exibicao, role_data in self.roles_pings[guild_id].items():
                 role_name = role_data.get('role_name', 'Cargo desconhecido')
@@ -418,22 +461,23 @@ class Ping(commands.Cog):
                 inline=False
             )
         
-        if self.embed_footer:
-            embed.set_footer(text=self.embed_footer)
-        if self.embed_thumbnail:
-            embed.set_thumbnail(url=self.embed_thumbnail)
-        if self.embed_image:
-            embed.set_image(url=self.embed_image)
+        if config["embed_footer"]:
+            embed.set_footer(text=config["embed_footer"])
+        if config["embed_thumbnail"]:
+            embed.set_thumbnail(url=config["embed_thumbnail"])
+        if config["embed_image"]:
+            embed.set_image(url=config["embed_image"])
         
         return embed
 
     # Modal para editar configurações do embed
     class EditConfigModal(Modal):
-        def __init__(self, cog, field, title, label, interaction, current_value=""):
+        def __init__(self, cog, field, title, label, interaction, current_value="", guild_id=None):
             super().__init__(title=title)
             self.cog = cog
             self.field = field
             self.interaction = interaction
+            self.guild_id = guild_id
             self.input = TextInput(
                 label=label,
                 default=current_value,
@@ -452,19 +496,22 @@ class Ping(commands.Cog):
                     await interaction.response.send_message("Cor inválida! Use formato hex (ex: 2C2F33).", ephemeral=True)
                     return
             
-            setattr(self.cog, f"embed_{self.field}", value)
-            self.cog.save_config()
+            # Atualiza a configuração do servidor específico
+            config = self.cog.get_guild_config(self.guild_id)
+            config[f"embed_{self.field}"] = value
+            self.cog.save_guild_config(self.guild_id)
             
             # Atualiza o preview
-            embed = self.cog.create_preview_embed(str(interaction.guild_id))
-            view = EditConfigView(self.cog, interaction)
+            embed = self.cog.create_preview_embed(self.guild_id)
+            view = EditConfigView(self.cog, interaction, self.guild_id)
             await interaction.response.edit_message(embed=embed, view=view)
 
     # Comando para configurar os pings (adicionar/remover cargos)
     @app_commands.command(name="config_ping", description="Configura os cargos de ping (Admin)")
     @app_commands.default_permissions(administrator=True)
     async def config_ping(self, interaction: discord.Interaction):
-        embed = self.create_preview_embed(str(interaction.guild_id))
+        guild_id = str(interaction.guild_id)
+        embed = self.create_preview_embed(guild_id)
         view = PingConfigView(self, interaction)
         await interaction.response.send_message("⚙️ **Configuração dos Pings**", embed=embed, view=view, ephemeral=True)
 
@@ -479,8 +526,13 @@ class Ping(commands.Cog):
             await interaction.response.send_message("❌ Não há pings configurados neste servidor! Use `/config_ping` para adicionar.", ephemeral=True)
             return
         
+        # Verifica permissões
+        if not interaction.guild.me.guild_permissions.manage_roles:
+            await interaction.response.send_message("❌ Preciso da permissão `Gerenciar Cargos`!", ephemeral=True)
+            return
+        
         # Cria view persistente para este servidor
-        view = PainelPingView(self, guild_id)
+        view = PainelPingView(self, interaction.guild_id)
         
         embed = self.create_preview_embed(guild_id)
         await interaction.channel.send(embed=embed, view=view)
@@ -490,8 +542,9 @@ class Ping(commands.Cog):
     @app_commands.command(name="editar_ping", description="Edita as configurações visuais do painel (Admin)")
     @app_commands.default_permissions(administrator=True)
     async def editar_ping(self, interaction: discord.Interaction):
-        view = EditConfigView(self, interaction)
-        embed = self.create_preview_embed(str(interaction.guild_id))
+        guild_id = str(interaction.guild_id)
+        view = EditConfigView(self, interaction, guild_id)
+        embed = self.create_preview_embed(guild_id)
         await interaction.response.send_message("🎨 **Editar Aparência do Painel**", embed=embed, view=view, ephemeral=True)
 
 
