@@ -1,0 +1,22 @@
+# requirements.txt - Dependências do bot Discord (para pip install -r requirements.txt)
+
+# Biblioteca principal do Discord (versão recente 2025/2026)
+discord.py>=2.4.0
+
+# Para carregar variáveis do .env
+python-dotenv>=1.0.0
+
+# Conexão com MongoDB Atlas (banco de dados)
+pymongo>=4.6.0
+
+# Webserver para manter o bot online no Railway(UptimeRobot)
+fastapi>=0.110.0
+uvicorn>=0.29.0
+
+# Opcional: se quiser adicionar logging mais bonito ou outras features no futuro
+# rich>=13.7.0          # para logs coloridos no console (opcional)
+
+# Não inclua pacotes pesados ou desnecessários para manter o deploy rápido no Render free tier
+motor>=3.3.0
+
+aiohttp

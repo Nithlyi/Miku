@@ -1,0 +1,5 @@
+# Arquivos sensíveis
+.env
+*.log
+__pycache__/
+*.pyc
