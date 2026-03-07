@@ -379,15 +379,15 @@ class PainelRegistroView(View):
         
         # Adiciona os três selects em linhas diferentes para ficar organizado
         idade_select = UserIdadeSelect(cog, guild_id)
-        idade_select.row = 0  # Primeira linha
+        idade_select.row = 0
         self.add_item(idade_select)
         
         genero_select = UserGeneroSelect(cog, guild_id)
-        genero_select.row = 1  # Segunda linha
+        genero_select.row = 1
         self.add_item(genero_select)
         
         pronome_select = UserPronomeSelect(cog, guild_id)
-        pronome_select.row = 2  # Terceira linha
+        pronome_select.row = 2
         self.add_item(pronome_select)
 
 
@@ -399,39 +399,39 @@ class EditRegistroConfigView(View):
         self.interaction = interaction
         self.guild_id = guild_id
 
-    @discord.ui.button(label="Título", style=discord.ButtonStyle.primary, custom_id="reg_edit_title")
+    @discord.ui.button(label="Título", style=discord.ButtonStyle.primary)
     async def edit_title(self, interaction: discord.Interaction, button: Button):
         modal = self.cog.EditConfigModal(self.cog, "title", "Editar Título", "Novo título:", 
                                        interaction, self.cog.config[self.guild_id]["embed_title"], self.guild_id)
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(label="Descrição", style=discord.ButtonStyle.primary, custom_id="reg_edit_desc")
+    @discord.ui.button(label="Descrição", style=discord.ButtonStyle.primary)
     async def edit_description(self, interaction: discord.Interaction, button: Button):
         modal = self.cog.EditConfigModal(self.cog, "description", "Editar Descrição", "Nova descrição:", 
                                        interaction, self.cog.config[self.guild_id]["embed_description"], self.guild_id)
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(label="Cor", style=discord.ButtonStyle.primary, custom_id="reg_edit_color")
+    @discord.ui.button(label="Cor", style=discord.ButtonStyle.primary)
     async def edit_color(self, interaction: discord.Interaction, button: Button):
         current = f"{self.cog.config[self.guild_id]['embed_color']:06X}"
         modal = self.cog.EditConfigModal(self.cog, "color", "Editar Cor", "Nova cor (hex):", 
                                        interaction, current, self.guild_id)
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(label="Footer", style=discord.ButtonStyle.secondary, custom_id="reg_edit_footer")
+    @discord.ui.button(label="Footer", style=discord.ButtonStyle.secondary)
     async def edit_footer(self, interaction: discord.Interaction, button: Button):
         modal = self.cog.EditConfigModal(self.cog, "footer", "Editar Footer", "Novo footer:", 
                                        interaction, self.cog.config[self.guild_id]["embed_footer"], self.guild_id)
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(label="Thumbnail", style=discord.ButtonStyle.secondary, custom_id="reg_edit_thumb")
+    @discord.ui.button(label="Thumbnail", style=discord.ButtonStyle.secondary)
     async def edit_thumbnail(self, interaction: discord.Interaction, button: Button):
         current = self.cog.config[self.guild_id]["embed_thumbnail"] or ""
         modal = self.cog.EditConfigModal(self.cog, "thumbnail", "Editar Thumbnail", "URL da thumbnail:", 
                                        interaction, current, self.guild_id)
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(label="Imagem", style=discord.ButtonStyle.secondary, custom_id="reg_edit_img")
+    @discord.ui.button(label="Imagem", style=discord.ButtonStyle.secondary)
     async def edit_image(self, interaction: discord.Interaction, button: Button):
         current = self.cog.config[self.guild_id]["embed_image"] or ""
         modal = self.cog.EditConfigModal(self.cog, "image", "Editar Imagem", "URL da imagem:", 
@@ -449,14 +449,13 @@ class Register(commands.Cog):
         self.client = None
         self.config_collection = None
         self.roles_collection = None
-        self.config = {}  # Configurações visuais por servidor
-        self.registro_roles = {}  # Cargos: guild_id -> {categoria: {nome_exibicao: {role_id, role_name}}}
+        self.config = {}
+        self.registro_roles = {}
         
         self.connect_mongo()
         self.load_all_configs()
         self.load_all_roles()
         
-        # Registra views persistentes
         for guild_id in self.registro_roles:
             self.bot.add_view(PainelRegistroView(self, guild_id))
 
@@ -474,7 +473,6 @@ class Register(commands.Cog):
             self.roles_collection = None
 
     def load_all_configs(self):
-        """Carrega configurações visuais do MongoDB"""
         self.config = {}
         if self.config_collection is not None:
             try:
@@ -494,7 +492,6 @@ class Register(commands.Cog):
                 print(f"❌ Erro ao carregar configurações: {e}")
 
     def load_all_roles(self):
-        """Carrega todos os cargos de registro do MongoDB"""
         self.registro_roles = {}
         if self.roles_collection is not None:
             try:
@@ -522,7 +519,6 @@ class Register(commands.Cog):
                 print(f"❌ Erro ao carregar cargos: {e}")
 
     def save_config(self, guild_id, config):
-        """Salva configuração visual de um servidor"""
         if self.config_collection is not None:
             try:
                 data = {
@@ -539,10 +535,8 @@ class Register(commands.Cog):
                 print(f"❌ Erro ao salvar configuração: {e}")
 
     async def add_registro_role(self, interaction: discord.Interaction, categoria: str, nome_exibicao: str, role_id: int, role_name: str):
-        """Adiciona um novo cargo de registro"""
         guild_id = str(interaction.guild_id)
         
-        # Inicializa estruturas se necessário
         if guild_id not in self.registro_roles:
             self.registro_roles[guild_id] = {"idade": {}, "genero": {}, "pronome": {}}
         
@@ -550,13 +544,11 @@ class Register(commands.Cog):
             await interaction.response.send_message(f"❌ O nome '{nome_exibicao}' já existe em {categoria}!", ephemeral=True)
             return
         
-        # Salva no dicionário
         self.registro_roles[guild_id][categoria][nome_exibicao] = {
             'role_id': role_id,
             'role_name': role_name
         }
         
-        # Salva no MongoDB
         if self.roles_collection is not None:
             self.roles_collection.update_one(
                 {"guild_id": guild_id, "categoria": categoria, "nome_exibicao": nome_exibicao},
@@ -570,7 +562,6 @@ class Register(commands.Cog):
                 upsert=True
             )
         
-        # Atualiza preview
         embed = self.create_preview_embed(guild_id)
         try:
             await interaction.response.edit_message(embed=embed, view=RegistroConfigView(self, interaction, guild_id))
@@ -579,24 +570,17 @@ class Register(commands.Cog):
             await interaction.response.send_message(f"✅ Opção '{nome_exibicao}' adicionada em {categoria}!", ephemeral=True)
 
     async def remove_registro_role(self, interaction: discord.Interaction, categoria: str, nome_exibicao: str):
-        """Remove um cargo de registro"""
         guild_id = str(interaction.guild_id)
         
         if guild_id not in self.registro_roles or nome_exibicao not in self.registro_roles[guild_id][categoria]:
             await interaction.response.send_message(f"❌ Opção '{nome_exibicao}' não encontrada!", ephemeral=True)
             return
         
-        role_data = self.registro_roles[guild_id][categoria][nome_exibicao]
-        role_name = role_data.get('role_name', 'Cargo desconhecido')
-        
-        # Remove do dicionário
         del self.registro_roles[guild_id][categoria][nome_exibicao]
         
-        # Remove do MongoDB
         if self.roles_collection is not None:
             self.roles_collection.delete_one({"guild_id": guild_id, "categoria": categoria, "nome_exibicao": nome_exibicao})
         
-        # Atualiza preview
         embed = self.create_preview_embed(guild_id)
         try:
             await interaction.response.edit_message(embed=embed, view=RegistroConfigView(self, interaction, guild_id))
@@ -605,7 +589,6 @@ class Register(commands.Cog):
             await interaction.response.send_message(f"✅ Opção '{nome_exibicao}' removida de {categoria}!", ephemeral=True)
 
     async def handle_registro_selection(self, interaction: discord.Interaction, guild_id: str, categoria: str, nome_exibicao: str):
-        """Gerencia a seleção do usuário no painel"""
         role_data = self.registro_roles.get(guild_id, {}).get(categoria, {}).get(nome_exibicao)
         
         if not role_data:
@@ -619,7 +602,6 @@ class Register(commands.Cog):
             await interaction.response.send_message("❌ O cargo associado não existe mais!", ephemeral=True)
             return
         
-        # Remove cargos da mesma categoria
         roles_removidos = 0
         categoria_roles = self.registro_roles.get(guild_id, {}).get(categoria, {})
         
@@ -633,7 +615,6 @@ class Register(commands.Cog):
                     except:
                         pass
         
-        # Adiciona/remove o cargo selecionado
         if role in interaction.user.roles:
             await interaction.user.remove_roles(role)
             msg = f"❌ Opção '{nome_exibicao}' removida"
@@ -680,48 +661,39 @@ class Register(commands.Cog):
         for nome, data in guild_roles["pronome"].items():
             pronomes.append(f"{nome} → @{data['role_name']}")
         
-        # Monta a tabela com alinhamento corrigido usando espaços fixos
+        # Monta a tabela alinhada igual à imagem
         tabela = ""
         
-        # Cabeçalho com formatação em negrito
-        tabela += "**Idade**" + " " * 15 + "| **Gênero**" + " " * 13 + "| **Pronomes**\n"
-        tabela += "─" * 20 + "┼" + "─" * 20 + "┼" + "─" * 20 + "\n"
+        # Cabeçalho
+        tabela += "Idade" + " " * 17 + "Gênero" + " " * 16 + "Pronomes\n"
+        tabela += "─" * 22 + "┼" + "─" * 22 + "┼" + "─" * 22 + "\n"
         
         # Determina quantas linhas teremos
-        max_linhas = max(len(idades), len(generos), len(pronomes), 1)
+        max_linhas = max(len(idades), len(generos), len(pronomes))
         
         for i in range(max_linhas):
             linha = ""
             
-            # Coluna Idade (fixa em 20 caracteres)
+            # Coluna Idade
             if i < len(idades):
-                texto_idade = idades[i]
+                linha += idades[i].ljust(22) + "│"
             else:
-                texto_idade = "⠀"
+                linha += " " * 22 + "│"
             
-            # Preenche com espaços até 20 caracteres
-            linha += texto_idade.ljust(20) + "│"
-            
-            # Coluna Gênero (fixa em 20 caracteres)
+            # Coluna Gênero
             if i < len(generos):
-                texto_genero = generos[i]
+                linha += generos[i].ljust(22) + "│"
             else:
-                texto_genero = "⠀"
+                linha += " " * 22 + "│"
             
-            linha += texto_genero.ljust(20) + "│"
-            
-            # Coluna Pronomes (restante)
+            # Coluna Pronomes
             if i < len(pronomes):
                 linha += pronomes[i]
-            else:
-                linha += "⠀"
             
             tabela += linha + "\n"
         
         # Adiciona a tabela ao embed
         embed.add_field(name="📋 Opções Disponíveis", value=f"```{tabela}```", inline=False)
-        
-        # Adiciona instrução
         embed.add_field(name="ℹ️ Como usar", value="Clique em uma opção abaixo para selecionar", inline=False)
         
         if config["embed_footer"]:
@@ -733,7 +705,6 @@ class Register(commands.Cog):
         
         return embed
 
-    # MODAL PARA EDITAR CONFIGURAÇÕES
     class EditConfigModal(Modal):
         def __init__(self, cog, field, title, label, interaction, current_value="", guild_id=None):
             super().__init__(title=title)
@@ -766,7 +737,6 @@ class Register(commands.Cog):
             view = EditRegistroConfigView(self.cog, interaction, self.guild_id)
             await interaction.response.edit_message(embed=embed, view=view)
 
-    # COMANDOS
     @app_commands.command(name="config_registro", description="Configura as opções de registro (Admin)")
     @app_commands.default_permissions(administrator=True)
     async def config_registro(self, interaction: discord.Interaction):
@@ -798,13 +768,11 @@ class Register(commands.Cog):
             await interaction.response.send_message("❌ Nenhuma opção configurada! Use `/config_registro` primeiro.", ephemeral=True)
             return
         
-        # Verifica se há pelo menos uma opção em cada categoria
         has_options = any(self.registro_roles[guild_id][cat] for cat in ["idade", "genero", "pronome"])
         if not has_options:
             await interaction.response.send_message("❌ Nenhuma opção configurada! Use `/config_registro` para adicionar.", ephemeral=True)
             return
         
-        # Verifica permissões
         if not interaction.guild.me.guild_permissions.manage_roles:
             await interaction.response.send_message("❌ Preciso da permissão `Gerenciar Cargos`!", ephemeral=True)
             return
