@@ -191,7 +191,7 @@ class TicketControlView(ui.View):
         )
         embed.add_field(
             name="🔵 Claimed By",
-            value=claimed_by if claimed_by else "@ly in silence",  # fallback para teste
+            value=claimed_by if claimed_by else "@silence",  # fallback para teste
             inline=True
         )
         # Célula vazia para fechar a linha de 3 colunas
