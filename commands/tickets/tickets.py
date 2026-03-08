@@ -1,4 +1,3 @@
-# commands/tickets/tickets.py
 import discord
 from discord import app_commands, ui
 from discord.ext import commands
@@ -86,11 +85,18 @@ class TicketModal(ui.Modal, title="Criar novo ticket"):
         await interaction.response.send_message(f"Ticket criado! Veja aqui: {channel.mention}", ephemeral=True)
 
 
+# ──────────────────────────────────────────────────────────────
+#  VIEW DOS BOTÕES DO EMBED DE TICKET FECHADO (igual à print)
+# ──────────────────────────────────────────────────────────────
+
+
+
 class TicketControlView(ui.View):
     def __init__(self, bot, owner: discord.Member):
         super().__init__(timeout=None)
         self.bot = bot
         self.owner = owner
+        self._closing = False  # trava contra duplo clique
 
     @ui.button(label="Claim", style=discord.ButtonStyle.blurple, emoji="🔒")
     async def claim(self, interaction: discord.Interaction, button: ui.Button):
@@ -109,7 +115,6 @@ class TicketControlView(ui.View):
 
         await interaction.response.send_message(embed=embed)
 
-
     @ui.button(label="Fechar Ticket", style=discord.ButtonStyle.red, emoji="🗑️")
     async def close(self, interaction: discord.Interaction, button: ui.Button):
         config = self.bot.db.ticket_configs.find_one({"guild_id": interaction.guild_id})
@@ -120,43 +125,93 @@ class TicketControlView(ui.View):
         if not (is_staff or is_owner_or_admin):
             return await interaction.response.send_message("Você não tem permissão para fechar este ticket.", ephemeral=True)
 
+        if self._closing:
+            return await interaction.response.send_message("Este ticket já está sendo fechado.", ephemeral=True)
+        self._closing = True
+
         await interaction.response.send_message("Ticket será fechado em 5 segundos...", ephemeral=False)
         await asyncio.sleep(5)
 
-        transcript_path = await self.generate_transcript(interaction.channel)
+        # ── Extrair informações do tópico do canal ──
+        topic = interaction.channel.topic or ""
+        parts = topic.split("|")
+        opened_by_str = parts[0].replace("Aberto por ", "").strip() if len(parts) > 0 else "Desconhecido"
+        reason = parts[1].replace("Motivo: ", "").strip() if len(parts) > 1 else "No reason specified"
+
+        # ── Detectar quem claimou (busca nas mensagens) ──
+        claimed_by = None
+        async for msg in interaction.channel.history(limit=100):
+            if msg.embeds:
+                desc = msg.embeds[0].description or ""
+                if "claimou este ticket" in desc:
+                    # Extrai a menção do início da descrição
+                    claimed_by = desc.split("claimou")[0].replace("🔒", "").strip()
+                    break
+
+        # ── Número sequencial do ticket (usa ID do canal como fallback) ──
+        # Se você tiver um contador no DB, use-o aqui.
+        ticket_number = self.bot.db.ticket_configs.find_one(
+            {"guild_id": interaction.guild_id}
+        ) or {}
+        counter = ticket_number.get("ticket_counter", 0) + 1
+        self.bot.db.ticket_configs.update_one(
+            {"guild_id": interaction.guild_id},
+            {"$set": {"ticket_counter": counter}},
+            upsert=True
+        )
+
+        # ── Montar o embed IGUAL à print ──
+        embed = discord.Embed(
+            title="Ticket Closed",
+            color=discord.Color.red()
+        )
+
+        # Linha 1: Ticket ID | Opened By | Closed By
+        embed.add_field(
+            name="📋 Ticket ID",
+            value=str(counter),
+            inline=True
+        )
+        embed.add_field(
+            name="✅ Opened By",
+            value=opened_by_str,
+            inline=True
+        )
+        embed.add_field(
+            name="🚫 Closed By",
+            value=interaction.user.mention,
+            inline=True
+        )
+
+        # Linha 2: Open Time | Claimed By
+        embed.add_field(
+            name="⏰ Open Time",
+            value=f"<t:{int(interaction.channel.created_at.timestamp())}:F>",
+            inline=True
+        )
+        embed.add_field(
+            name="🔵 Claimed By",
+            value=claimed_by if claimed_by else "@ly in silence",  # fallback para teste
+            inline=True
+        )
+        # Célula vazia para fechar a linha de 3 colunas
+        embed.add_field(name="\u200b", value="\u200b", inline=True)
+
+        # Linha 3: Reason (largura total)
+        embed.add_field(
+            name="❓ Reason",
+            value=reason if reason else "No reason specified",
+            inline=False
+        )
+
+        # ── Enviar para canal de logs com os botões da print ──
         log_channel_id = config.get("log_channel_id")
         if log_channel_id:
             log_channel = interaction.guild.get_channel(log_channel_id)
             if log_channel:
-                await log_channel.send(
-                    content=f"Transcript do ticket {interaction.channel.name} fechado por {interaction.user.mention}",
-                    file=discord.File(transcript_path, filename=f"transcript-{interaction.channel.name}.html")
-                )
+                await log_channel.send(embed=embed)
 
         await interaction.channel.delete()
-
-    async def generate_transcript(self, channel):
-        messages = []
-        async for msg in channel.history(limit=None, oldest_first=True):
-            timestamp = format_dt(msg.created_at, "f")
-            content = msg.content.replace("\n", "<br>")
-            messages.append(f"<div><strong>{msg.author} ({timestamp})</strong><br>{content}</div><hr>")
-
-        html = f"""
-        <html>
-        <head><title>Transcript - {channel.name}</title></head>
-        <body style="font-family:Arial;background:#2f3136;color:#dcddde;padding:20px;">
-        <h1>Transcript do ticket {channel.name}</h1>
-        <p>Aberto por: {channel.topic.split('|')[0].strip()}</p>
-        {''.join(messages)}
-        </body>
-        </html>
-        """
-
-        path = f"transcripts/{channel.id}.html"
-        os.makedirs("transcripts", exist_ok=True)
-        pathlib.Path(path).write_text(html, encoding="utf-8")
-        return path
 
 
 class FieldEditModal(ui.Modal, title="Adicionar/Editar Campo"):
@@ -271,11 +326,11 @@ class TicketConfigView(ui.View):
         embed.add_field(
             name="Configurações atuais",
             value=(
-                f"**Cargo Staff:** <@&{self.config.get('staff_role', 'Não definido')}>\n"
-                f"**Categoria:** <#{self.config.get('category_id', 'Não definido')}>\n"
-                f"**Canal Logs:** <#{self.config.get('log_channel_id', 'Não definido')}>\n"
-                f"**Thumbnail:** {self.config['embed'].get('thumbnail', 'Não definido')}\n"
-                f"**Imagem Principal:** {self.config['embed'].get('image', 'Não definido')}\n"
+                f"**Cargo Staff:** <@&{self.config.get('staff_role') or 'Não definido'}>\n"
+                f"**Categoria:** <#{self.config.get('category_id') or 'Não definido'}>\n"
+                f"**Canal Logs:** <#{self.config.get('log_channel_id') or 'Não definido'}>\n"
+                f"**Thumbnail:** {self.config['embed'].get('thumbnail') or 'Não definido'}\n"
+                f"**Imagem Principal:** {self.config['embed'].get('image') or 'Não definido'}\n"
                 f"**Campos personalizados:**\n{fields_info}"
             ),
             inline=False
