@@ -88,7 +88,7 @@ cooldown_manager = UserCooldown(cooldown_seconds=6.0)
 class MyBot(commands.Bot):
     def __init__(self):
         super().__init__(
-            command_prefix="!",
+            command_prefix=".",
             intents=intents,
             application_id=int(APPLICATION_ID),
             help_command=None
