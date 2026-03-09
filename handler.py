@@ -45,6 +45,7 @@ COGS_ENABLED = {
     "utils": [
         "commands.utils.maintenance",
         "commands.utils.color",
+        "commands.utils.cargo",
         "commands.utils.register",
         "commands.utils.ping",
         "commands.utils.verify",
