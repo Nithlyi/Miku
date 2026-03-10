@@ -49,6 +49,7 @@ COGS_ENABLED = {
         "commands.utils.register",
         "commands.utils.ping",
         "commands.utils.verify",
+        "commands.utils.votacao",
         "commands.utils.avatar",
         "commands.utils.botinfo",
         "commands.utils.serverinfo",
