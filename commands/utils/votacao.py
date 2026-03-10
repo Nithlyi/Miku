@@ -5,7 +5,8 @@ from discord.ui import Button, View, Modal, TextInput
 import os
 import asyncio
 import uuid
-from datetime import datetime, timedelta
+import re
+from datetime import datetime, timedelta, timezone
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 from bson import ObjectId
@@ -23,7 +24,6 @@ def parse_duration(value: str) -> timedelta | None:
     minutes = 0
 
     # tenta 1h30m
-    import re
     match = re.fullmatch(r'(?:(\d+)h)?(?:(\d+)m)?', value)
     if not match or not match.group(0):
         return None
@@ -99,6 +99,8 @@ def build_embed(poll: dict) -> discord.Embed:
     else:
         ends_at = poll.get("ends_at")
         if ends_at:
+            if ends_at.tzinfo is None:
+                ends_at = ends_at.replace(tzinfo=timezone.utc)
             ts = int(ends_at.timestamp())
             embed.add_field(name="Encerra em", value=f"<t:{ts}:R>", inline=True)
 
@@ -210,7 +212,7 @@ class CreatePollModal(Modal, title="Criar Votação"):
         # Valida imagem
         image = self.poll_image.value.strip() or None
 
-        ends_at = datetime.utcnow() + td
+        ends_at = datetime.now(timezone.utc) + td
 
         config = {
             "embed_title":  self.poll_title.value.strip(),
@@ -268,7 +270,9 @@ class Votacao(commands.Cog):
 
             ends_at = poll.get("ends_at")
             if ends_at:
-                delay = (ends_at - datetime.utcnow()).total_seconds()
+                if ends_at.tzinfo is None:
+                    ends_at = ends_at.replace(tzinfo=timezone.utc)
+                delay = (ends_at - datetime.now(timezone.utc)).total_seconds()
                 if delay > 0:
                     task = self.bot.loop.create_task(self._close_after(poll_id, delay))
                     self._timers[poll_id] = task
@@ -289,7 +293,7 @@ class Votacao(commands.Cog):
             "votes_map":  {},
             "ends_at":    ends_at,
             "closed":     False,
-            "created_at": datetime.utcnow()
+            "created_at": datetime.now(timezone.utc)
         }
 
         if self.collection is not None:
@@ -312,7 +316,7 @@ class Votacao(commands.Cog):
                 {"$set": {"message_id": str(msg.id)}}
             )
 
-        delay = (ends_at - datetime.utcnow()).total_seconds()
+        delay = (ends_at - datetime.now(timezone.utc)).total_seconds()
         task  = self.bot.loop.create_task(self._close_after(poll_id, delay))
         self._timers[poll_id] = task
 
